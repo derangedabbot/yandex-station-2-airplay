@@ -326,7 +326,7 @@ input[type=range]{width:100%;accent-color:#79a8ff}
 .cols{display:grid;grid-template-columns:1fr;gap:0}
 @media (min-width:900px){.cols{grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;align-items:start}}
 .cols>.card{margin-bottom:14px}
-pre{white-space:pre-wrap;margin:10px 0 0}
+pre{white-space:pre-wrap;margin:10px 0 0;max-height:340px;overflow:auto}
 .tabs{display:flex;gap:8px;margin:0 0 16px}
 .tab{width:auto;padding:9px 16px;border-radius:10px;border:1px solid #262a33;background:#181b22;color:#8b93a1;font-size:14px}
 .tab.on{background:#232833;color:#e8eaed;border-color:#3a4152}
@@ -452,6 +452,31 @@ select{width:100%;padding:10px;border-radius:10px;border:1px solid #2d3340;backg
 <div class="cols">
 
 <div class="card">
+  <div class="grid">
+    <button data-a="airplay-restart">Перезапустить AirPlay</button>
+    <button data-a="airplay-off">Выключить AirPlay</button>
+    <button data-a="avahi-restart">Перезапустить avahi</button>
+    <button data-a="mediad-restart">Поднять Алису</button>
+    <button data-a="reboot" class="warn">Перезагрузить</button>
+  </div>
+  <div class="small">Только домашняя сеть</div>
+</div>
+
+<div class="card">
+  <div class="dim">Логи · быстрый доступ</div>
+  <div class="grid" style="margin-top:8px">
+    <button data-log="airplay">Приёмник</button>
+    <button data-log="owner">Распорядитель</button>
+    <button data-log="avahi">Avahi</button>
+    <button data-log="boot">Загрузка</button>
+    <button data-log="updates">Обновления</button>
+    <button data-log="panel">Панель</button>
+  </div>
+  <pre id="out" class="small"></pre>
+</div>
+
+
+<div class="card">
   <div class="hdr"><span class="dim">События</span><b id="ev-up" class="dim"></b></div>
   <div id="ev-list"><div class="dim">…</div></div>
   <div class="small">Загрузки и выключения. «Нештатная» — если перед загрузкой не было штатного выключения (сбой, watchdog, щёлкнули питанием).</div>
@@ -479,29 +504,6 @@ select{width:100%;padding:10px;border-radius:10px;border:1px solid #2d3340;backg
   <pre id="sys-log" class="small">…</pre>
 </div>
 
-</div>
-<div class="card">
-  <div class="grid">
-    <button data-a="airplay-restart">Перезапустить AirPlay</button>
-    <button data-a="airplay-off">Выключить AirPlay</button>
-    <button data-a="avahi-restart">Перезапустить avahi</button>
-    <button data-a="mediad-restart">Поднять Алису</button>
-    <button data-a="reboot" class="warn">Перезагрузить</button>
-  </div>
-  <div class="small">Только домашняя сеть</div>
-</div>
-
-<div class="card">
-  <div class="dim">Логи · быстрый доступ</div>
-  <div class="grid" style="margin-top:8px">
-    <button data-log="airplay">Приёмник</button>
-    <button data-log="owner">Распорядитель</button>
-    <button data-log="avahi">Avahi</button>
-    <button data-log="boot">Загрузка</button>
-    <button data-log="updates">Обновления</button>
-    <button data-log="panel">Панель</button>
-  </div>
-  <pre id="out" class="small"></pre>
 </div>
 </div><!-- /view-sys -->
 
