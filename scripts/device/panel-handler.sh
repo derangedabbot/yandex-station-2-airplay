@@ -210,6 +210,14 @@ do_action() {
       # запуск потока качает трек несколько секунд — панель не должна ждать
       ( /data/local/bin/zvukd flow >>/data/local/tmp/zvukd.log 2>&1 & )
       send "text/plain; charset=utf-8" "включаю Мой поток" ;;
+    zvuk-qadd)
+      send "text/plain; charset=utf-8" "$(/data/local/bin/zvukd queue-add "$(qval id)" 2>&1)" ;;
+    zvuk-qadd-album)
+      send "text/plain; charset=utf-8" "$(/data/local/bin/zvukd queue-add-album "$(qval id)" 2>&1)" ;;
+    zvuk-qadd-artist)
+      send "text/plain; charset=utf-8" "$(/data/local/bin/zvukd queue-add-artist "$(qval id)" 2>&1)" ;;
+    zvuk-clear)
+      send "text/plain; charset=utf-8" "$(/data/local/bin/zvukd queue-clear 2>&1)" ;;
     zvuk-jump)
       N=$(qval n)
       send "text/plain; charset=utf-8" "$(/data/local/bin/zvukd jump "$N" 2>&1)" ;;
@@ -509,6 +517,7 @@ select{width:100%;padding:10px;border-radius:10px;border:1px solid #2d3340;backg
     <button data-a="zvuk-next">Следующий трек</button>
     <button data-a="zvuk-toggle" id="z-toggle">Пауза</button>
     <button data-a="zvuk-stop">Остановить</button>
+    <button data-a="zvuk-clear" onclick="return confirm('Очистить очередь? Играющий трек останется.')">Очистить очередь</button>
     <button data-a="zvuk-shuffle">Перемешать</button>
     <button data-a="zvuk-resume-last" id="z-resume" style="display:none">Продолжить последнее</button>
   </div>
@@ -736,10 +745,13 @@ function renderResults(d){
     h.textContent=g[0]+' · '+items.length;
     list.appendChild(h);
     items.forEach(function(t){
-      var extra=(g[0]==='Исполнители')?{label:'Альбомы',run:function(){artistAlbums(t)}}:null;
+      var extras=[];
+      if(g[0]==='Исполнители')extras.push({label:'Альбомы',run:function(){artistAlbums(t)}});
+      var plus={'Треки':'zvuk-qadd','Альбомы':'zvuk-qadd-album','Исполнители':'zvuk-qadd-artist'}[g[0]];
+      if(plus)extras.push({label:'+',run:qadd(plus,t.id)});
       var action=g[2];
       if(g[0]==='Плейлисты'&&shufflePlaylists)action='zvuk-play-playlist-shuffled';
-      list.appendChild(mkRow(t,false,action,g[3](t),extra));
+      list.appendChild(mkRow(t,false,action,g[3](t),extras));
     });
   });
   document.getElementById('s-count').textContent=total+' шт';
@@ -808,6 +820,17 @@ function artistAlbums(a){
           (t.year?t.year+' · ':'')+(t.kind==='single'?'сингл':(t.kind==='ep'?'EP':(t.kind==='compilation'?'сборник':'альбом')))));
       });
     }).catch(function(e){list.textContent='ошибка: '+e});
+}
+
+// «+»: положить в конец очереди трек, весь альбом или популярные треки исполнителя
+function qadd(action,id){
+  return function(){
+    show('…');
+    fetch('/action?do='+action+'&id='+encodeURIComponent(id))
+      .then(function(r){return r.text()}).then(function(x){
+        show(x);setTimeout(function(){loadQueue();refresh()},1500);
+      }).catch(function(){});
+  };
 }
 
 function scrollToList(){
