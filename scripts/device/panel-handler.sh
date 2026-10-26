@@ -171,6 +171,13 @@ do_action() {
       send "text/plain; charset=utf-8" "$(/data/local/bin/airplay-ctl.sh prev >/dev/null 2>&1 && echo 'назад' || echo 'не вышло')" ;;
     airplay-toggle)
       send "text/plain; charset=utf-8" "$(/data/local/bin/airplay-ctl.sh toggle >/dev/null 2>&1 && echo 'пауза/играть' || echo 'не вышло')" ;;
+    alice-say)
+      # текст в base64 (t64): так же передаётся поисковый запрос — qval не декодирует URL
+      T64=$(qval t64 | sed 's/%2B/+/g; s/%2b/+/g; s/%2F/\//g; s/%2f/\//g; s/%3D/=/g; s/%3d/=/g')
+      TXT=$(printf '%s' "$T64" | busybox base64 -d 2>/dev/null)
+      if [ -z "$TXT" ]; then send "text/plain; charset=utf-8" "пустая команда"; return; fi
+      ( /data/local/bin/alice-say.sh "$TXT" >>/data/local/tmp/alice-say.log 2>&1 & )
+      send "text/plain; charset=utf-8" "Алисе отправлено: $TXT" ;;
     airplay-next)
       send "text/plain; charset=utf-8" "$(/data/local/bin/airplay-ctl.sh next >/dev/null 2>&1 && echo 'дальше' || echo 'не вышло')" ;;
     zvuk-flow)
@@ -438,6 +445,21 @@ select{width:100%;padding:10px;border-radius:10px;border:1px solid #2d3340;backg
     <button data-a="zvuk-resume-last" id="z-resume" style="display:none">Продолжить последнее</button>
   </div>
   <div class="small">Музыка из Звука по твоему вкусу, без остановки</div>
+</div>
+
+<div class="card">
+  <div class="hdr"><span class="dim">Сказать Алисе</span><b class="dim">как голосом</b></div>
+  <input type="text" id="a-q" placeholder="например: включи мою волну">
+  <div class="grid" style="margin-top:8px">
+    <button onclick="aliceSay()">Отправить</button>
+  </div>
+  <div class="grid" style="grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;margin-top:6px">
+    <button onclick="aliceQuick('включи мою волну')">Моя волна</button>
+    <button onclick="aliceQuick('громкость 3')">Громкость 3</button>
+    <button onclick="aliceQuick('какая погода')">Погода</button>
+    <button onclick="aliceQuick('стоп')">Стоп</button>
+  </div>
+  <div class="small">Уходит в движок колонки один раз; отвечает она голосом как обычно</div>
 </div>
 
 <div class="card">
@@ -765,6 +787,18 @@ function switchView(v){
   if(v==='sys') loadSys();
 }
 document.querySelectorAll('[data-view]').forEach(function(b){b.onclick=function(){switchView(b.dataset.view)}});
+
+// Сказать Алисе текстом: base64, потому что обработчик не декодирует URL
+function aliceSayText(t){
+  if(!t) return;
+  show('…');
+  var b=btoa(unescape(encodeURIComponent(t)));
+  fetch('/action?do=alice-say&t64='+encodeURIComponent(b))
+    .then(function(r){return r.text()}).then(show)
+    .catch(function(e){show('ошибка: '+e)});
+}
+function aliceSay(){ var el=document.getElementById('a-q'); var t=(el.value||'').trim(); if(!t) return; aliceSayText(t); el.value=''; }
+function aliceQuick(t){ aliceSayText(t); }
 
 function fmtTs(t){
   var d=new Date(t*1000);
