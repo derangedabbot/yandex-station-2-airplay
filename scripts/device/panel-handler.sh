@@ -213,6 +213,14 @@ do_action() {
     zvuk-next)
       ( /data/local/bin/zvukd next >>/data/local/tmp/zvukd.log 2>&1 & )
       send "text/plain; charset=utf-8" "следующий трек" ;;
+    zvuk-toggle)
+      # одна кнопка: играет — пауза, на паузе — продолжить
+      ZS=$(/data/local/bin/zvukd status 2>/dev/null | cut -d'|' -f1)
+      case "$ZS" in
+        play)  send "text/plain; charset=utf-8" "$(/data/local/bin/zvukd pause 2>&1)" ;;
+        pause) send "text/plain; charset=utf-8" "$(/data/local/bin/zvukd resume 2>&1)" ;;
+        *)     send "text/plain; charset=utf-8" "сейчас ничего не играет" ;;
+      esac ;;
     zvuk-pause)
       send "text/plain; charset=utf-8" "$(/data/local/bin/zvukd pause 2>&1)" ;;
     zvuk-resume)
@@ -489,8 +497,7 @@ select{width:100%;padding:10px;border-radius:10px;border:1px solid #2d3340;backg
   <div class="grid" style="margin-top:8px">
     <button data-a="zvuk-flow">Включить Мой поток</button>
     <button data-a="zvuk-next">Следующий трек</button>
-    <button data-a="zvuk-pause">Пауза</button>
-    <button data-a="zvuk-resume">Продолжить</button>
+    <button data-a="zvuk-toggle" id="z-toggle">Пауза</button>
     <button data-a="zvuk-stop">Остановить</button>
     <button data-a="zvuk-shuffle">Перемешать</button>
     <button data-a="zvuk-resume-last" id="z-resume" style="display:none">Продолжить последнее</button>
@@ -594,6 +601,9 @@ function paint(s){
   var zn={play:'Играет',pause:'Пауза',idle:'Молчит',off:'Плеер не отвечает'};
   var zs=document.getElementById('z-state');
   zs.textContent=zn[s.zvuk]||'—';
+  // одна кнопка: подпись зависит от состояния
+  var zt=document.getElementById('z-toggle');
+  if(zt) zt.textContent=(s.zvuk==='play')?'Пауза':(s.zvuk==='pause'?'Продолжить':'Пауза');
   zs.className=(s.zvuk==='play')?'ok':((s.zvuk==='off')?'bad':'dim');
   document.getElementById('z-title').textContent=s.zvuk_title||'—';
   var cov=document.getElementById('z-cover');
