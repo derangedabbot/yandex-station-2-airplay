@@ -32,6 +32,29 @@ send() {
 
 pcount() { ps w 2>/dev/null | grep -c "$1"; }
 
+# Громкость колонки. Важно: это НЕ регистры усилителя (numid=1/2/3) — их человек почти
+# не слышит, поэтому ползунок «работал только с 75%». Громкость у станции задаёт
+# софт-регулятор в /etc/asound.conf: `default` → dmix → softvol "Master" (0…255).
+# Именно его крутит Алиса, поэтому шкала совпадает с её командой «громкость N».
+# Обработчик экспортирует свой минимальный ALSA_CONFIG_PATH — для микшера его сбрасываем,
+# иначе amixer не находит карту («Invalid CTL hw:0»).
+vol_pct() {
+  V=$( (unset ALSA_CONFIG_PATH; /usr/bin/amixer -D default sget Master 2>/dev/null) \
+        | sed -n 's/.*\[\([0-9]*\)%\].*/\1/p' | head -1)
+  case "$V" in ''|*[!0-9]*) echo 0; return ;; esac
+  echo "$V"
+}
+
+vol_set() {
+  P=$1
+  case "$P" in ''|*[!0-9]*) return 1 ;; esac
+  [ "$P" -lt 0 ] && P=0
+  [ "$P" -gt 100 ] && P=100
+  V=$(( P * 255 / 100 ))
+  (unset ALSA_CONFIG_PATH; /usr/bin/amixer -D default sset Master "$V" >/dev/null 2>&1)
+  echo "$P"
+}
+
 pcm_owner() {
   # Быстрый путь: ядро само называет владельца устройства (0 с вместо перебора
   # всех /proc — тот занимал 4 с на каждый запрос статуса и подвешивал панель).
@@ -161,7 +184,7 @@ status_json() {
     ZSAV=$(printf '%s' "$ZOUT" | cut -d'|' -f11); ZSAV=${ZSAV:-0}
   fi
 
-  echo "{\"fw\":\"${FW:-—}\",\"shairport\":$SH,\"airplay\":$APS,\"nqptp\":$NQ,\"avahi\":$AV,\"mediad\":$MD,\"updatesd\":$UP,\"listen\":\"${LPORT}\",\"playing\":$EST,\"pcm\":\"$(pcm_owner)\",\"zvuk\":\"$ZS\",\"zvuk_title\":\"$ZT\",\"zvuk_cover\":\"$ZC\",\"zvuk_idx\":$ZI,\"zvuk_total\":$ZN,\"zvuk_pos\":$ZP,\"zvuk_dur\":$ZD,\"zvuk_album_id\":\"$ZAID\",\"zvuk_album\":\"$ZAL\",\"zvuk_saved\":$ZSAV,\"uptime\":$((UPT/60)),\"free\":\"${FREE:--}\",\"temp\":$TEMP,\"ip\":\"${IP:-—}\",\"ssid\":\"${SSID:-—}\",\"band\":\"${BAND:-—}\",\"load1\":\"$L1\",\"load5\":\"$L5\",\"load15\":\"$L15\",\"procs\":\"$PROCS\",\"cpu\":$CPUPCT,\"mem_total\":${MEMT:-0},\"mem_used\":${MEMU:-0},\"mem_pct\":$MEMPCT,\"root\":\"${ROOT:-—}\",\"data\":\"${DATA:-—}\",\"tee\":\"${TEE:-—}\",\"model\":\"${MODEL:-—}\",\"cores\":${CORES:-0},\"kernel\":\"${KERN:-—}\"}"
+  echo "{\"fw\":\"${FW:-—}\",\"shairport\":$SH,\"airplay\":$APS,\"nqptp\":$NQ,\"avahi\":$AV,\"mediad\":$MD,\"updatesd\":$UP,\"vol\":$(vol_pct),\"listen\":\"${LPORT}\",\"playing\":$EST,\"pcm\":\"$(pcm_owner)\",\"zvuk\":\"$ZS\",\"zvuk_title\":\"$ZT\",\"zvuk_cover\":\"$ZC\",\"zvuk_idx\":$ZI,\"zvuk_total\":$ZN,\"zvuk_pos\":$ZP,\"zvuk_dur\":$ZD,\"zvuk_album_id\":\"$ZAID\",\"zvuk_album\":\"$ZAL\",\"zvuk_saved\":$ZSAV,\"uptime\":$((UPT/60)),\"free\":\"${FREE:--}\",\"temp\":$TEMP,\"ip\":\"${IP:-—}\",\"ssid\":\"${SSID:-—}\",\"band\":\"${BAND:-—}\",\"load1\":\"$L1\",\"load5\":\"$L5\",\"load15\":\"$L15\",\"procs\":\"$PROCS\",\"cpu\":$CPUPCT,\"mem_total\":${MEMT:-0},\"mem_used\":${MEMU:-0},\"mem_pct\":$MEMPCT,\"root\":\"${ROOT:-—}\",\"data\":\"${DATA:-—}\",\"tee\":\"${TEE:-—}\",\"model\":\"${MODEL:-—}\",\"cores\":${CORES:-0},\"kernel\":\"${KERN:-—}\"}"
 }
 
 do_action() {
@@ -171,6 +194,9 @@ do_action() {
       send "text/plain; charset=utf-8" "$(/data/local/bin/airplay-ctl.sh prev >/dev/null 2>&1 && echo 'назад' || echo 'не вышло')" ;;
     airplay-toggle)
       send "text/plain; charset=utf-8" "$(/data/local/bin/airplay-ctl.sh toggle >/dev/null 2>&1 && echo 'пауза/играть' || echo 'не вышло')" ;;
+    volume)
+      P=$(vol_set "$(qval v)")
+      if [ -n "$P" ]; then send "text/plain; charset=utf-8" "громкость $P%"; else send "text/plain; charset=utf-8" "нужно число 0-100"; fi ;;
     alice-say)
       # текст в base64 (t64): так же передаётся поисковый запрос — qval не декодирует URL
       T64=$(qval t64 | sed 's/%2B/+/g; s/%2b/+/g; s/%2F/\//g; s/%2f/\//g; s/%3D/=/g; s/%3d/=/g')
@@ -398,6 +424,32 @@ select{width:100%;padding:10px;border-radius:10px;border:1px solid #2d3340;backg
   <div class="small">Управление тем, что играет с Mac или iPhone: команда уходит источнику</div>
 </div>
 
+<div class="card">
+  <div class="hdr"><span class="dim">Громкость</span><b id="vol-val" class="dim">…</b></div>
+  <div style="display:flex;gap:10px;align-items:center;margin-top:8px">
+    <button style="width:52px;padding:8px" onclick="volStep(-5)">−</button>
+    <input type="range" id="vol-range" min="0" max="100" step="1" value="0"
+           oninput="volShow(this.value)" onchange="volSend(this.value)">
+    <button style="width:52px;padding:8px" onclick="volStep(5)">+</button>
+  </div>
+  <div class="small">Общая громкость колонки: наш плеер, AirPlay и Алиса — одна ручка</div>
+</div>
+
+<div class="card">
+  <div class="hdr"><span class="dim">Сказать Алисе</span><b class="dim">как голосом</b></div>
+  <input type="text" id="a-q" placeholder="например: включи мою волну">
+  <div class="grid" style="margin-top:8px">
+    <button onclick="aliceSay()">Отправить</button>
+  </div>
+  <div class="grid" style="grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;margin-top:6px">
+    <button onclick="aliceQuick('включи мою волну')">Моя волна</button>
+    <button onclick="aliceQuick('громкость 3')">Громкость 3</button>
+    <button onclick="aliceQuick('какая погода')">Погода</button>
+    <button onclick="aliceQuick('стоп')">Стоп</button>
+  </div>
+  <div class="small">Уходит в движок колонки один раз; отвечает она голосом как обычно</div>
+</div>
+
 <div style="grid-column:1/-1;margin-bottom:6px" class="dim">Плеер</div>
 
 <div class="card">
@@ -445,21 +497,6 @@ select{width:100%;padding:10px;border-radius:10px;border:1px solid #2d3340;backg
     <button data-a="zvuk-resume-last" id="z-resume" style="display:none">Продолжить последнее</button>
   </div>
   <div class="small">Музыка из Звука по твоему вкусу, без остановки</div>
-</div>
-
-<div class="card">
-  <div class="hdr"><span class="dim">Сказать Алисе</span><b class="dim">как голосом</b></div>
-  <input type="text" id="a-q" placeholder="например: включи мою волну">
-  <div class="grid" style="margin-top:8px">
-    <button onclick="aliceSay()">Отправить</button>
-  </div>
-  <div class="grid" style="grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;margin-top:6px">
-    <button onclick="aliceQuick('включи мою волну')">Моя волна</button>
-    <button onclick="aliceQuick('громкость 3')">Громкость 3</button>
-    <button onclick="aliceQuick('какая погода')">Погода</button>
-    <button onclick="aliceQuick('стоп')">Стоп</button>
-  </div>
-  <div class="small">Уходит в движок колонки один раз; отвечает она голосом как обычно</div>
 </div>
 
 <div class="card">
@@ -592,6 +629,7 @@ function paint(s){
   document.getElementById('v-tee').textContent=s.tee||'—';
   document.getElementById('v-temp').textContent=(s.temp?s.temp+' °C':'—');
   document.getElementById('v-uptime').textContent=fmtUptimeMin(s.uptime);
+  if(typeof s.vol==='number' && document.activeElement!==document.getElementById('vol-range')) volShow(s.vol);
   document.title=(s.playing?'▶ ':'')+'Станция Midi';
 }
 
@@ -789,6 +827,21 @@ function switchView(v){
 document.querySelectorAll('[data-view]').forEach(function(b){b.onclick=function(){switchView(b.dataset.view)}});
 
 // Сказать Алисе текстом: base64, потому что обработчик не декодирует URL
+// --- громкость ---
+function volShow(v){
+  document.getElementById('vol-range').value=v;
+  document.getElementById('vol-val').textContent=v+'%';
+}
+function volSend(v){
+  v=Math.max(0,Math.min(100,parseInt(v||0,10)));
+  fetch('/action?do=volume&v='+v,{cache:'no-store'}).then(function(r){return r.text()})
+    .then(function(){volShow(v)}).catch(function(){});
+}
+function volStep(d){
+  var el=document.getElementById('vol-range');
+  volSend(parseInt(el.value||0,10)+d);
+}
+
 function aliceSayText(t){
   if(!t) return;
   show('…');
