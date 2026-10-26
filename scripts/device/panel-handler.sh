@@ -375,6 +375,11 @@ h1{font-size:20px;margin:0 0 4px}
 .ok{color:#5fd38d}.bad{color:#f2707b}.dim{color:#8b93a1}
 .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 button{width:100%;padding:12px;border-radius:10px;border:1px solid #2d3340;background:#1f2430;color:#e8eaed;font-size:15px}
+/* переключение треков одной капсулой: значков достаточно, подписи — в подсказке */
+.tp{display:flex;width:fit-content;border:1px solid #2d3340;border-radius:10px;overflow:hidden;background:#1f2430}
+.tp button{width:auto;min-width:78px;padding:12px 16px;border:0;border-radius:0;background:transparent;font-size:17px;letter-spacing:2px}
+.tp button+button{border-left:1px solid #2d3340}
+.tp button:active{background:#253046}
 button:active{background:#2a3140}
 button.warn{border-color:#553;color:#f0c674}
 input[type=text]{width:100%;padding:10px;border-radius:10px;border:1px solid #2d3340;background:#12151b;color:#e8eaed}
@@ -511,11 +516,15 @@ select{width:100%;padding:10px;border-radius:10px;border:1px solid #2d3340;backg
       <div class="row" style="border:0;padding-top:0"><span id="z-time" class="dim">0:00</span><b id="z-time-total" class="dim">0:00</b></div>
     </div>
   </div>
-  <div class="grid" style="margin-top:8px">
-    <button data-a="zvuk-flow">Включить Мой поток</button>
-    <button data-a="zvuk-prev">Предыдущий трек</button>
-    <button data-a="zvuk-next">Следующий трек</button>
-    <button data-a="zvuk-toggle" id="z-toggle">Пауза</button>
+  <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:8px">
+    <button data-a="zvuk-flow" style="width:auto;flex:1 1 170px">Включить Мой поток</button>
+    <div class="tp" title="Переключение треков">
+      <button data-a="zvuk-prev" title="Предыдущий трек">◀◀</button>
+      <button data-a="zvuk-toggle" id="z-toggle" title="Пауза">❚❚</button>
+      <button data-a="zvuk-next" title="Следующий трек">▶▶</button>
+    </div>
+  </div>
+  <div class="grid" style="margin-top:10px">
     <button data-a="zvuk-stop">Остановить</button>
     <button data-a="zvuk-clear" onclick="return confirm('Очистить очередь? Играющий трек останется.')">Очистить очередь</button>
     <button data-a="zvuk-shuffle">Перемешать</button>
@@ -622,7 +631,11 @@ function paint(s){
   zs.textContent=zn[s.zvuk]||'—';
   // одна кнопка: подпись зависит от состояния
   var zt=document.getElementById('z-toggle');
-  if(zt) zt.textContent=(s.zvuk==='play')?'Пауза':(s.zvuk==='pause'?'Продолжить':'Пауза');
+  if(zt){
+    var playing=(s.zvuk==='play');
+    zt.textContent=playing?'❚❚':'▶';
+    zt.title=playing?'Пауза':'Продолжить';
+  }
   zs.className=(s.zvuk==='play')?'ok':((s.zvuk==='off')?'bad':'dim');
   document.getElementById('z-title').textContent=s.zvuk_title||'—';
   var cov=document.getElementById('z-cover');
