@@ -747,6 +747,7 @@ function renderResults(d){
     items.forEach(function(t){
       var extras=[];
       if(g[0]==='Исполнители')extras.push({label:'Альбомы',run:function(){artistAlbums(t)}});
+      if(g[0]==='Альбомы')extras.push({label:'Открыть',run:function(){albumTracks(t.id,t.title)}});
       var plus={'Треки':'zvuk-qadd','Альбомы':'zvuk-qadd-album','Исполнители':'zvuk-qadd-artist'}[g[0]];
       if(plus)extras.push({label:'+',run:qadd(plus,t.id)});
       var action=g[2];
@@ -821,7 +822,8 @@ function artistAlbums(a){
       items.forEach(function(t){
         list.appendChild(mkRow(t,false,'zvuk-play-album',
           (t.year?t.year+' · ':'')+(t.kind==='single'?'сингл':(t.kind==='ep'?'EP':(t.kind==='compilation'?'сборник':'альбом'))),
-          [{label:'+',run:qadd('zvuk-qadd-album',t.id)}]));
+          [{label:'Открыть',run:function(){albumTracks(t.id,t.title)}},
+           {label:'+',run:qadd('zvuk-qadd-album',t.id)}]));
       });
     }).catch(function(e){list.textContent='ошибка: '+e});
 }
