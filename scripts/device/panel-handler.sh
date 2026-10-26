@@ -814,30 +814,74 @@ function albumTracks(id,title){
     }).catch(function(e){list.textContent='ошибка: '+e});
 }
 
+// Список альбомов исполнителя: у Аквариума их 71, поэтому есть фильтр по названию
+// и переключатель порядка (новые сверху по умолчанию).
+var lastAlbums=null, lastAlbumTitle='', albumFilterData='', albumNewFirst=true;
+
+function albumKind(t){
+  return (t.year?t.year+' · ':'')+(t.kind==='single'?'сингл':(t.kind==='ep'?'EP':(t.kind==='compilation'?'сборник':'альбом')));
+}
+
+function renderAlbumRows(){
+  var box=document.getElementById('a-rows');
+  if(!box||!lastAlbums)return;
+  var low=(albumFilterData||'').trim().toLowerCase();
+  var items=lastAlbums.filter(function(t){
+    if(!low)return true;
+    return ((t.title||'')+' '+(t.year||'')+' '+albumKind(t)).toLowerCase().indexOf(low)>=0;
+  });
+  items.sort(function(x,y){
+    var a=+x.year||0, b=+y.year||0;
+    return albumNewFirst ? (b-a) : (a-b);
+  });
+  box.innerHTML='';
+  var h=document.createElement('div');
+  h.className='dim';h.style.cssText='margin:8px 0 2px;font-size:13px';
+  h.textContent='Альбомы · '+lastAlbumTitle+' · '+items.length+(low?(' из '+lastAlbums.length):'');
+  box.appendChild(h);
+  document.getElementById('s-count').textContent=items.length+' шт';
+  if(!items.length){var e=document.createElement('div');e.className='dim';e.textContent='ничего не нашлось';box.appendChild(e);return}
+  items.forEach(function(t){
+    box.appendChild(mkRow(t,false,'zvuk-play-album',albumKind(t),
+      [{label:'Открыть',run:function(){albumTracks(t.id,t.title)}},
+       {label:'+',run:qadd('zvuk-qadd-album',t.id)}]));
+  });
+}
+
 function artistAlbums(a){
   var list=document.getElementById('s-list');
   list.textContent='загружаю альбомы…';
   document.getElementById('s-count').textContent='';
   fetch('/api/artist-albums?id='+encodeURIComponent(a.id),{cache:'no-store'})
     .then(function(r){return r.json()}).then(function(d){
-      var items=(d&&d.items)||[];
+      lastAlbums=(d&&d.items)||[];
+      lastAlbumTitle=a.title||'';
+      albumFilterData='';albumNewFirst=true;
       list.innerHTML='';
-      var back=document.createElement('button');
-      back.textContent='← назад к поиску';
-      back.style.cssText='width:auto;padding:6px 10px;font-size:13px;margin-bottom:8px';
-      back.onclick=function(){if(lastFound)renderResults(lastFound)};
-      list.appendChild(back);
-      var h=document.createElement('div');
-      h.className='dim';h.style.cssText='margin:6px 0 2px;font-size:13px';
-      h.textContent='Альбомы · '+(a.title||'')+' · '+items.length;
-      list.appendChild(h);
-      document.getElementById('s-count').textContent=items.length+' шт';
-      items.forEach(function(t){
-        list.appendChild(mkRow(t,false,'zvuk-play-album',
-          (t.year?t.year+' · ':'')+(t.kind==='single'?'сингл':(t.kind==='ep'?'EP':(t.kind==='compilation'?'сборник':'альбом'))),
-          [{label:'Открыть',run:function(){albumTracks(t.id,t.title)}},
-           {label:'+',run:qadd('zvuk-qadd-album',t.id)}]));
-      });
+      list.appendChild(backBtn());
+
+      // строка фильтра + порядок
+      var bar=document.createElement('div');
+      bar.style.cssText='display:flex;gap:8px;margin:2px 0 6px;flex-wrap:wrap';
+      var inp=document.createElement('input');
+      inp.type='text';inp.id='a-filter';inp.placeholder='фильтр по названию';
+      inp.style.cssText='flex:1 1 170px;min-width:130px;padding:10px;border-radius:10px;border:1px solid #2d3340;background:#161a22;color:#e8eaed;font-size:14px';
+      inp.oninput=function(){albumFilterData=inp.value;renderAlbumRows()};
+      var ord=document.createElement('button');
+      ord.id='a-order';ord.textContent='Сначала новые';
+      ord.style.cssText='width:auto;padding:10px 12px;font-size:13px';
+      ord.onclick=function(){
+        albumNewFirst=!albumNewFirst;
+        ord.textContent=albumNewFirst?'Сначала новые':'Сначала старые';
+        renderAlbumRows();
+      };
+      bar.appendChild(inp);bar.appendChild(ord);
+      list.appendChild(bar);
+
+      var rows=document.createElement('div');rows.id='a-rows';
+      list.appendChild(rows);
+      renderAlbumRows();
+      scrollToList();
     }).catch(function(e){list.textContent='ошибка: '+e});
 }
 
