@@ -443,7 +443,6 @@ select{width:100%;padding:10px;border-radius:10px;border:1px solid #2d3340;backg
   </div>
   <div class="grid" style="grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;margin-top:6px">
     <button onclick="aliceQuick('включи мою волну')">Моя волна</button>
-    <button onclick="aliceQuick('громкость 3')">Громкость 3</button>
     <button onclick="aliceQuick('какая погода')">Погода</button>
     <button onclick="aliceQuick('стоп')">Стоп</button>
   </div>
