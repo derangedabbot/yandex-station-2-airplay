@@ -210,6 +210,12 @@ do_action() {
       # запуск потока качает трек несколько секунд — панель не должна ждать
       ( /data/local/bin/zvukd flow >>/data/local/tmp/zvukd.log 2>&1 & )
       send "text/plain; charset=utf-8" "включаю Мой поток" ;;
+    zvuk-jump)
+      N=$(qval n)
+      send "text/plain; charset=utf-8" "$(/data/local/bin/zvukd jump "$N" 2>&1)" ;;
+    zvuk-del)
+      N=$(qval n)
+      send "text/plain; charset=utf-8" "$(/data/local/bin/zvukd queue-del "$N" 2>&1)" ;;
     zvuk-prev)
       ( /data/local/bin/zvukd prev >>/data/local/tmp/zvukd.log 2>&1 & )
       send "text/plain; charset=utf-8" "предыдущий трек" ;;
@@ -664,19 +670,23 @@ function mkRow(t,mark,action,sub,extra){
   b.style.cssText='width:auto;padding:8px 12px;font-size:13px;flex:0 0 auto';
   b.onclick=function(){
     b.textContent='…';
-    fetch('/action?do='+(action||'zvuk-play-id')+'&id='+encodeURIComponent(t.id))
+    var rk=(t._k||'id'), rv=(t._k?t._v:t.id);
+    fetch('/action?do='+(action||'zvuk-play-id')+'&'+rk+'='+encodeURIComponent(rv))
       .then(function(r){return r.text()}).then(function(x){
         show(x);b.textContent='Играть';
         setTimeout(function(){refresh();loadQueue()},2500);
       }).catch(function(){b.textContent='Играть'});
   };
   d.appendChild(img);d.appendChild(box);
-  if(extra&&extra.label){
-    var eb=document.createElement('button');eb.textContent=extra.label;
+  // справа может быть одна кнопка или несколько (в очереди — «Альбом» и «Исполнитель»)
+  var extras=Array.isArray(extra)?extra:(extra?[extra]:[]);
+  extras.forEach(function(e){
+    if(!e||!e.label)return;
+    var eb=document.createElement('button');eb.textContent=e.label;
     eb.style.cssText='width:auto;padding:8px 10px;font-size:13px;flex:0 0 auto';
-    eb.onclick=extra.run;
+    eb.onclick=e.run;
     d.appendChild(eb);
-  }
+  });
   d.appendChild(b);
   return d;
 }
@@ -771,6 +781,7 @@ function albumTracks(id,title){
       playAll.onclick=function(){fetch('/action?do=zvuk-play-album&id='+encodeURIComponent(id)).then(function(){setTimeout(function(){refresh();loadQueue()},2500)})};
       list.appendChild(playAll);
       items.forEach(function(t){list.appendChild(mkRow(t,false,'zvuk-play-id',t.artists||''))});
+      scrollToList();
     }).catch(function(e){list.textContent='ошибка: '+e});
 }
 
@@ -799,6 +810,56 @@ function artistAlbums(a){
     }).catch(function(e){list.textContent='ошибка: '+e});
 }
 
+function scrollToList(){
+  var el=document.getElementById('s-list');
+  if(el&&el.scrollIntoView)el.scrollIntoView({behavior:'smooth',block:'center'});
+}
+
+function backBtn(){
+  var back=document.createElement('button');
+  back.textContent='← назад к поиску';
+  back.style.cssText='width:auto;padding:6px 10px;font-size:13px;margin-bottom:8px';
+  back.onclick=function(){if(lastFound)renderResults(lastFound)};
+  return back;
+}
+
+function queueDel(n){
+  fetch('/action?do=zvuk-del&n='+encodeURIComponent(n))
+    .then(function(r){return r.text()}).then(function(x){
+      show(x);setTimeout(function(){loadQueue();refresh()},800);
+    }).catch(function(){});
+}
+
+// Исполнитель из очереди: ищем по имени и показываем его треки (и кнопку «Все альбомы»)
+function artistTracks(name){
+  var list=document.getElementById('s-list'), cnt=document.getElementById('s-count');
+  if(!list)return;
+  list.textContent='загружаю исполнителя…';cnt.textContent='';
+  fetch('/api/search?q64='+encodeURIComponent(b64(name)),{cache:'no-store'})
+    .then(function(r){return r.json()}).then(function(d){
+      var low=name.toLowerCase();
+      var tracks=((d&&d.tracks)||[]);
+      var mine=tracks.filter(function(t){return (t.artists||'').toLowerCase().indexOf(low)>=0});
+      if(!mine.length)mine=tracks;
+      list.innerHTML='';
+      list.appendChild(backBtn());
+      var h=document.createElement('div');h.className='dim';
+      h.style.cssText='margin:6px 0 2px;font-size:13px';
+      h.textContent='Исполнитель · '+name+' · '+mine.length+' трек(ов)';
+      list.appendChild(h);
+      cnt.textContent=mine.length+' шт';
+      var a=((d&&d.artists)||[]).filter(function(x){return (x.title||'').toLowerCase().indexOf(low)>=0})[0];
+      if(a){
+        var ab=document.createElement('button');ab.textContent='Все альбомы';
+        ab.style.cssText='width:auto;padding:6px 10px;font-size:13px;margin:6px 0';
+        ab.onclick=function(){artistAlbums(a)};
+        list.appendChild(ab);
+      }
+      mine.forEach(function(t){list.appendChild(mkRow(t,false,'zvuk-play-id',t.album||''))});
+      scrollToList();
+    }).catch(function(e){list.textContent='ошибка: '+e});
+}
+
 function loadQueue(){
   var list=document.getElementById('q-list');
   fetch('/api/queue',{cache:'no-store'}).then(function(r){return r.json()}).then(function(d){
@@ -806,7 +867,14 @@ function loadQueue(){
     var items=(d&&d.items)||[];
     document.getElementById('q-count').textContent=items.length?((d.index+1)+' из '+items.length):'';
     if(!items.length){list.textContent='пусто — включи поток или выбери трек из поиска';return}
-    items.forEach(function(t,i){list.appendChild(mkRow(t,i===d.index))});
+    items.forEach(function(t,i){
+      var row={id:t.id,title:t.title,artists:t.artists,duration:t.duration,cover:t.cover,_k:'n',_v:i+1};
+      var extras=[];
+      if(t.album_id)extras.push({label:'Альбом',run:function(){albumTracks(t.album_id,t.album)}});
+      if(t.artists)extras.push({label:'Исполнитель',run:function(){artistTracks(t.artists)}});
+      extras.push({label:'✕',run:function(){queueDel(i+1)}});
+      list.appendChild(mkRow(row,i===d.index,'zvuk-jump',null,extras));
+    });
   }).catch(function(){});
 }
 
