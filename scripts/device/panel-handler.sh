@@ -927,6 +927,64 @@ function pickArtist(arts,name){
   return arts.filter(function(a){return (a.title||'').toLowerCase().indexOf(low)>=0})[0]||null;
 }
 
+// Исполнитель: популярные треки + поиск песни по каталогу.
+// Популярных всего ~30, поэтому если среди них нет совпадения — идём в общий поиск
+// запросом «исполнитель + слово» и показываем его треки.
+var lastArtist=null, artistFilterData='', artistSearchToken=0;
+
+function artistRow(t){
+  return mkRow(t,false,'zvuk-play-id',t.album||'',[{label:'+',run:qadd('zvuk-qadd',t.id)}]);
+}
+
+function renderArtistTracks(){
+  var box=document.getElementById('ar-rows');
+  if(!box||!lastArtist)return;
+  var low=(artistFilterData||'').trim().toLowerCase();
+  var items=lastArtist.items.filter(function(t){
+    return !low || ((t.title||'')+' '+(t.album||'')).toLowerCase().indexOf(low)>=0;
+  });
+  box.innerHTML='';
+  var h=document.createElement('div');h.className='dim';
+  h.style.cssText='margin:8px 0 2px;font-size:13px';
+  h.textContent='Популярные треки · '+lastArtist.title+' · '+items.length+(low?(' из '+lastArtist.items.length):'');
+  box.appendChild(h);
+  document.getElementById('s-count').textContent=items.length+' шт';
+  if(!items.length){
+    var e=document.createElement('div');e.className='dim';e.style.cssText='padding:6px 0';
+    e.textContent=low?'среди популярных нет — ищу по каталогу…':'нет треков';
+    box.appendChild(e);
+    if(low)artistSearchRemote(artistFilterData);
+    return;
+  }
+  items.forEach(function(t){box.appendChild(artistRow(t))});
+}
+
+function artistSearchRemote(q){
+  if(!lastArtist)return;
+  var name=lastArtist.title||'';
+  var tok=++artistSearchToken;
+  fetch('/api/search?q64='+encodeURIComponent(b64(name+' '+q)),{cache:'no-store'})
+    .then(function(r){return r.json()}).then(function(d){
+      if(tok!==artistSearchToken)return;
+      var nm=name.toLowerCase();
+      var mine=((d&&d.tracks)||[]).filter(function(t){
+        return (t.artists||'').toLowerCase().indexOf(nm)>=0;
+      });
+      var onlyMine=mine.length>0;
+      var items=onlyMine?mine:((d&&d.tracks)||[]);
+      var box=document.getElementById('ar-rows');
+      if(!box)return;
+      box.innerHTML='';
+      var h=document.createElement('div');h.className='dim';
+      h.style.cssText='margin:8px 0 2px;font-size:13px';
+      h.textContent='Поиск по каталогу «'+q+'» · '+items.length+(onlyMine?'':' (не только его)');
+      box.appendChild(h);
+      document.getElementById('s-count').textContent=items.length+' шт';
+      if(!items.length){var e=document.createElement('div');e.className='dim';e.textContent='ничего не нашлось';box.appendChild(e);return}
+      items.forEach(function(t){box.appendChild(artistRow(t))});
+    }).catch(function(){});
+}
+
 function artistTracks(name){
   var list=document.getElementById('s-list'), cnt=document.getElementById('s-count');
   if(!list)return;
@@ -952,16 +1010,14 @@ function artistTracks(name){
       return {artist:null,items:mine};
     }).then(function(res){
       var a=res.artist, items=res.items||[];
+      lastArtist={a:a, title:(a?a.title:name), items:items};
+      artistFilterData='';
       list.innerHTML='';
       list.appendChild(backBtn());
-      var h=document.createElement('div');h.className='dim';
-      h.style.cssText='margin:6px 0 2px;font-size:13px';
-      h.textContent='Исполнитель · '+(a?a.title:name)+' · '+items.length+' трек(ов)';
-      list.appendChild(h);
-      cnt.textContent=items.length+' шт';
+
       if(a){
         var ab=document.createElement('button');ab.textContent='Все альбомы';
-        ab.style.cssText='width:auto;padding:6px 10px;font-size:13px;margin:6px 0';
+        ab.style.cssText='width:auto;padding:6px 10px;font-size:13px;margin:2px 0 6px';
         ab.onclick=function(){artistAlbums(a)};
         list.appendChild(ab);
         fetch('/api/artist-albums?id='+encodeURIComponent(a.id),{cache:'no-store'})
@@ -970,10 +1026,20 @@ function artistTracks(name){
             if(n)ab.textContent='Все альбомы · '+n;
           }).catch(function(){});
       }
-      items.forEach(function(t){
-        list.appendChild(mkRow(t,false,'zvuk-play-id',t.album||'',
-          [{label:'+',run:qadd('zvuk-qadd',t.id)}]));
-      });
+
+      // поиск песни у этого исполнителя
+      var bar=document.createElement('div');
+      bar.style.cssText='display:flex;gap:8px;margin:2px 0 6px;flex-wrap:wrap';
+      var inp=document.createElement('input');
+      inp.type='text';inp.id='ar-filter';inp.placeholder='поиск песни у исполнителя';
+      inp.style.cssText='flex:1 1 170px;min-width:130px;padding:10px;border-radius:10px;border:1px solid #2d3340;background:#161a22;color:#e8eaed;font-size:14px';
+      inp.oninput=function(){artistFilterData=inp.value;renderArtistTracks()};
+      bar.appendChild(inp);
+      list.appendChild(bar);
+
+      var rows=document.createElement('div');rows.id='ar-rows';
+      list.appendChild(rows);
+      renderArtistTracks();
       scrollToList();
     }).catch(function(e){list.textContent='ошибка: '+e});
 }
