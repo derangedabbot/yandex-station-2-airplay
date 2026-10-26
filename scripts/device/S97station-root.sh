@@ -4,6 +4,7 @@
 case "$1" in
   start)
     /data/local/bin/boot-journal.sh boot 2>/dev/null
+    /data/local/bin/telemetry-hosts.sh 2>/dev/null
     mount -o remount,rw / 2>/dev/null
     mkdir -p /data/quasar
     touch /data/quasar/activate_adb_quasmodrom /data/quasar/activate_network_adb 2>/dev/null

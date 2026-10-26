@@ -569,7 +569,7 @@ function paint(s){
   document.getElementById('v-data').textContent=s.data||'—';
   document.getElementById('v-tee').textContent=s.tee||'—';
   document.getElementById('v-temp').textContent=(s.temp?s.temp+' °C':'—');
-  document.getElementById('v-uptime').textContent=(s.uptime||0)+' мин';
+  document.getElementById('v-uptime').textContent=fmtUptimeMin(s.uptime);
   document.title=(s.playing?'▶ ':'')+'Станция Midi';
 }
 
@@ -772,10 +772,18 @@ function fmtTs(t){
   var p=function(n){return (n<10?'0':'')+n};
   return p(d.getDate())+'.'+p(d.getMonth()+1)+' '+p(d.getHours())+':'+p(d.getMinutes());
 }
+// «2500 минут» ничего не говорит — показываем дни/часы/минуты
+function fmtUptimeMin(min){
+  min=Math.floor(min||0);
+  var d=Math.floor(min/1440), h=Math.floor((min%1440)/60), m=min%60, p=[];
+  if(d>0) p.push(d+' д');
+  if(h>0||d>0) p.push(h+' ч');
+  p.push(m+' мин');
+  return p.join(' ');
+}
 function uptimeStr(sec){
   if(sec<=0) return '';
-  var h=Math.floor(sec/3600), m=Math.round((sec%3600)/60);
-  return h>0 ? (h+' ч '+m+' мин') : (m+' мин');
+  return fmtUptimeMin(Math.round(sec/60));
 }
 function loadEvents(){
   var box=document.getElementById('ev-list');
