@@ -558,7 +558,7 @@ select{width:100%;padding:10px;border-radius:10px;border:1px solid #2d3340;backg
 </div>
 
 <div class="card">
-  <div class="hdr"><span class="dim">Логи</span><b class="dim">хвост файла</b></div>
+  <div class="hdr"><span class="dim">Логи</span><b class="dim">хвост файла · время МСК</b></div>
   <select id="log-name">
     <option value="mediad">Алиса (mediad)</option>
     <option value="airplay">Приёмник AirPlay</option>
@@ -902,13 +902,24 @@ function loadEvents(){
       }
       out+='<div class="ev"><span>'+title+badge+extra+'</span><span class="dim">'+fmtTs(e.time)+'</span></div>';
     }
-    box.innerHTML=out;
+    box.innerHTML=msk(out);
   }).catch(function(){box.innerHTML='<div class="bad">не удалось получить события</div>'});
+}
+// Демоны станции и наши скрипты пишут время в UTC (на колонке TZ не задан).
+// Показываем по Москве: прибавляем 3 часа ко всем меткам вида 2026-10-26 14:23:02.
+function msk(t){
+  return (t||'').replace(/(\d{4})-(\d\d)-(\d\d)[ T](\d\d):(\d\d):(\d\d)/g,
+    function(m,y,mo,d,h,mi,s){
+      var dt=new Date(Date.UTC(+y,+mo-1,+d,+h,+mi,+s)+3*3600*1000);
+      function p(n){return (n<10?'0':'')+n}
+      return dt.getUTCFullYear()+'-'+p(dt.getUTCMonth()+1)+'-'+p(dt.getUTCDate())+' '+
+             p(dt.getUTCHours())+':'+p(dt.getUTCMinutes())+':'+p(dt.getUTCSeconds());
+    });
 }
 function loadSys(){
   loadEvents();
   fetch('/api/logs?name=watchdog&lines=20',{cache:'no-store'}).then(function(r){return r.text()})
-    .then(function(t){document.getElementById('sys-watch').textContent=t||'(пусто)'})
+    .then(function(t){document.getElementById('sys-watch').textContent=msk(t)||'(пусто)'})
     .catch(function(){document.getElementById('sys-watch').textContent='ошибка'});
 }
 function loadLog(){
@@ -916,7 +927,7 @@ function loadLog(){
   var pre=document.getElementById('sys-log');
   pre.textContent='…';
   fetch('/api/logs?name='+encodeURIComponent(n)+'&lines=120',{cache:'no-store'})
-    .then(function(r){return r.text()}).then(function(t){pre.textContent=t||'(пусто)'})
+    .then(function(r){return r.text()}).then(function(t){pre.textContent=msk(t)||'(пусто)'})
     .catch(function(e){pre.textContent='ошибка: '+e});
 }
 </script></body></html>
