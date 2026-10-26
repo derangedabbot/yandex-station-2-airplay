@@ -210,6 +210,9 @@ do_action() {
       # запуск потока качает трек несколько секунд — панель не должна ждать
       ( /data/local/bin/zvukd flow >>/data/local/tmp/zvukd.log 2>&1 & )
       send "text/plain; charset=utf-8" "включаю Мой поток" ;;
+    zvuk-prev)
+      ( /data/local/bin/zvukd prev >>/data/local/tmp/zvukd.log 2>&1 & )
+      send "text/plain; charset=utf-8" "предыдущий трек" ;;
     zvuk-next)
       ( /data/local/bin/zvukd next >>/data/local/tmp/zvukd.log 2>&1 & )
       send "text/plain; charset=utf-8" "следующий трек" ;;
@@ -496,6 +499,7 @@ select{width:100%;padding:10px;border-radius:10px;border:1px solid #2d3340;backg
   </div>
   <div class="grid" style="margin-top:8px">
     <button data-a="zvuk-flow">Включить Мой поток</button>
+    <button data-a="zvuk-prev">Предыдущий трек</button>
     <button data-a="zvuk-next">Следующий трек</button>
     <button data-a="zvuk-toggle" id="z-toggle">Пауза</button>
     <button data-a="zvuk-stop">Остановить</button>
