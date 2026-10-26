@@ -792,7 +792,10 @@ function albumTracks(id,title){
       playAll.style.cssText='width:auto;padding:6px 10px;font-size:13px;margin:6px 0';
       playAll.onclick=function(){fetch('/action?do=zvuk-play-album&id='+encodeURIComponent(id)).then(function(){setTimeout(function(){refresh();loadQueue()},2500)})};
       list.appendChild(playAll);
-      items.forEach(function(t){list.appendChild(mkRow(t,false,'zvuk-play-id',t.artists||''))});
+      items.forEach(function(t){
+        list.appendChild(mkRow(t,false,'zvuk-play-id',t.artists||'',
+          [{label:'+',run:qadd('zvuk-qadd',t.id)}]));
+      });
       scrollToList();
     }).catch(function(e){list.textContent='ошибка: '+e});
 }
@@ -817,7 +820,8 @@ function artistAlbums(a){
       document.getElementById('s-count').textContent=items.length+' шт';
       items.forEach(function(t){
         list.appendChild(mkRow(t,false,'zvuk-play-album',
-          (t.year?t.year+' · ':'')+(t.kind==='single'?'сингл':(t.kind==='ep'?'EP':(t.kind==='compilation'?'сборник':'альбом')))));
+          (t.year?t.year+' · ':'')+(t.kind==='single'?'сингл':(t.kind==='ep'?'EP':(t.kind==='compilation'?'сборник':'альбом'))),
+          [{label:'+',run:qadd('zvuk-qadd-album',t.id)}]));
       });
     }).catch(function(e){list.textContent='ошибка: '+e});
 }
@@ -907,7 +911,10 @@ function artistTracks(name){
             if(n)ab.textContent='Все альбомы · '+n;
           }).catch(function(){});
       }
-      items.forEach(function(t){list.appendChild(mkRow(t,false,'zvuk-play-id',t.album||''))});
+      items.forEach(function(t){
+        list.appendChild(mkRow(t,false,'zvuk-play-id',t.album||'',
+          [{label:'+',run:qadd('zvuk-qadd',t.id)}]));
+      });
       scrollToList();
     }).catch(function(e){list.textContent='ошибка: '+e});
 }
