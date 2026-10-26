@@ -7,7 +7,7 @@ LOG=/data/local/tmp/alice-voice.log
 PAT=/data/local/etc/voice-triggers.txt
 FRAME=/tmp/alice-frame.bin
 STATE=/tmp/alice-voice.last
-COOLDOWN=5
+COOLDOWN=2
 ZVUKD=/data/local/bin/zvukd
 ZVUKLOG=/data/local/tmp/zvukd.log
 
@@ -18,12 +18,15 @@ for d in /proc/[0-9]*; do
   [ "$pid" = "$$" ] && continue
   [ "$pid" = "$PPID" ] && continue
   case "$(tr '\0' ' ' < "$d/cmdline" 2>/dev/null || true)" in
-    *"/data/local/bin/alice-voice.sh"*|*"socat1 -u TCP:127.0.0.1:9875"*) kill "$pid" 2>/dev/null ;;
+    *"/data/local/bin/alice-voice.sh"*|*socat*9875*) kill "$pid" 2>/dev/null ;;
   esac
 done
 
 hook() { # $1 — сработавшая фраза
-  echo "$(date): СРАБОТАЛО «$1»" >> "$LOG"
+  # В кадре лежит и сам текст распознавания — пишем его в лог, иначе непонятно,
+  # на какую именно фразу сработал шаблон (было: «стоп» на чужой фразе).
+  TXT=$(/usr/bin/strings -a "$FRAME" 2>/dev/null | tr '\n' ' ' | sed 's/  */ /g' | cut -c1-90)
+  echo "$(date): СРАБОТАЛО «$1»${TXT:+ · в кадре: $TXT}" >> "$LOG"
   # Если идёт AirPlay — команду адресуем источнику (Mac/iPhone), а не нашему плееру.
   AP=/data/local/bin/airplay-ctl.sh
   if [ -x "$AP" ] && "$AP" status 2>/dev/null | head -1 | grep -q 'активен'; then
@@ -83,11 +86,14 @@ while :; do
       case "$PATTERN" in \#*) continue ;; esac
       if grep -aqF -- "$PATTERN" "$FRAME"; then
         NOW=$(date +%s)
-        # одно и то же распознавание приходит в нескольких кадрах подряд —
-        # помним последнюю сработавшую фразу и её время
-        LAST_TS=0; LAST_PAT=""
-        [ -f "$STATE" ] && { LAST_TS=$(cut -d'|' -f1 "$STATE"); LAST_PAT=$(cut -d'|' -f2 "$STATE"); }
-        if [ "$PATTERN" = "$LAST_PAT" ] && [ $((NOW - LAST_TS)) -lt "$COOLDOWN" ]; then
+        # Распознавание приходит несколькими кадрами, и в одном кадре могут совпасть сразу
+        # два шаблона («ыключи музыку» и «ыключи»). Раньше гасился только повтор ТОГО ЖЕ
+        # шаблона, поэтому чередование давало серию команд (наблюдали 8 «стоп» подряд).
+        # Теперь после любого срабатывания молчим COOLDOWN секунд.
+        LAST_TS=0
+        [ -f "$STATE" ] && LAST_TS=$(cut -d'|' -f1 "$STATE" 2>/dev/null)
+        case "$LAST_TS" in ''|*[!0-9]*) LAST_TS=0 ;; esac
+        if [ $((NOW - LAST_TS)) -lt "$COOLDOWN" ]; then
           continue
         fi
         echo "$NOW|$PATTERN" > "$STATE"
