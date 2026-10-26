@@ -830,32 +830,61 @@ function queueDel(n){
     }).catch(function(){});
 }
 
-// Исполнитель из очереди: ищем по имени и показываем его треки (и кнопку «Все альбомы»)
+// Исполнитель: ищем его по имени, берём точное совпадение (иначе легко попасть на
+// однофамильца вроде «психея формалина» с двумя альбомами) и показываем его популярные треки.
+function pickArtist(arts,name){
+  var low=(name||'').trim().toLowerCase();
+  var same=arts.filter(function(a){return (a.title||'').trim().toLowerCase()===low});
+  if(same.length)return same[0];
+  var starts=arts.filter(function(a){return (a.title||'').toLowerCase().indexOf(low)===0});
+  if(starts.length)return starts[0];
+  return arts.filter(function(a){return (a.title||'').toLowerCase().indexOf(low)>=0})[0]||null;
+}
+
 function artistTracks(name){
   var list=document.getElementById('s-list'), cnt=document.getElementById('s-count');
   if(!list)return;
   list.textContent='загружаю исполнителя…';cnt.textContent='';
   fetch('/api/search?q64='+encodeURIComponent(b64(name)),{cache:'no-store'})
     .then(function(r){return r.json()}).then(function(d){
-      var low=name.toLowerCase();
-      var tracks=((d&&d.tracks)||[]);
-      var mine=tracks.filter(function(t){return (t.artists||'').toLowerCase().indexOf(low)>=0});
-      if(!mine.length)mine=tracks;
+      var a=pickArtist((d&&d.artists)||[],name);
+      var low=(name||'').trim().toLowerCase();
+      if(a){
+        return fetch('/api/artist-tracks?id='+encodeURIComponent(a.id),{cache:'no-store'})
+          .then(function(r){return r.json()}).then(function(td){
+            var items=(td&&td.items)||[];
+            if(!items.length) throw new Error('пусто');
+            return {artist:a,items:items};
+          })
+          .catch(function(){
+            // популярные треки не отдались — показываем найденные по имени
+            var mine=((d&&d.tracks)||[]).filter(function(t){return (t.artists||'').toLowerCase().indexOf(low)>=0});
+            return {artist:a,items:mine};
+          });
+      }
+      var mine=((d&&d.tracks)||[]).filter(function(t){return (t.artists||'').toLowerCase().indexOf(low)>=0});
+      return {artist:null,items:mine};
+    }).then(function(res){
+      var a=res.artist, items=res.items||[];
       list.innerHTML='';
       list.appendChild(backBtn());
       var h=document.createElement('div');h.className='dim';
       h.style.cssText='margin:6px 0 2px;font-size:13px';
-      h.textContent='Исполнитель · '+name+' · '+mine.length+' трек(ов)';
+      h.textContent='Исполнитель · '+(a?a.title:name)+' · '+items.length+' трек(ов)';
       list.appendChild(h);
-      cnt.textContent=mine.length+' шт';
-      var a=((d&&d.artists)||[]).filter(function(x){return (x.title||'').toLowerCase().indexOf(low)>=0})[0];
+      cnt.textContent=items.length+' шт';
       if(a){
         var ab=document.createElement('button');ab.textContent='Все альбомы';
         ab.style.cssText='width:auto;padding:6px 10px;font-size:13px;margin:6px 0';
         ab.onclick=function(){artistAlbums(a)};
         list.appendChild(ab);
+        fetch('/api/artist-albums?id='+encodeURIComponent(a.id),{cache:'no-store'})
+          .then(function(r){return r.json()}).then(function(ad){
+            var n=((ad&&ad.items)||[]).length;
+            if(n)ab.textContent='Все альбомы · '+n;
+          }).catch(function(){});
       }
-      mine.forEach(function(t){list.appendChild(mkRow(t,false,'zvuk-play-id',t.album||''))});
+      items.forEach(function(t){list.appendChild(mkRow(t,false,'zvuk-play-id',t.album||''))});
       scrollToList();
     }).catch(function(e){list.textContent='ошибка: '+e});
 }
@@ -1026,6 +1055,7 @@ case "$URLPATH" in
       send "application/json" "$(/data/local/bin/zvukd search "$Q" 2>/dev/null || echo '{"tracks":[],"albums":[],"artists":[]}')" ;;
   /api/queue)  send "application/json" "$(/data/local/bin/zvukd queue 2>/dev/null || echo '{"items":[]}')" ;;
   /api/album-tracks) send "application/json" "$(/data/local/bin/zvukd album-tracks "$(qval id)" 2>/dev/null || echo '{"items":[]}')" ;;
+  /api/artist-tracks) send "application/json" "$(/data/local/bin/zvukd artist-tracks "$(qval id)" 2>/dev/null || echo '{"items":[]}')" ;;
   /api/artist-albums)
       send "application/json" "$(/data/local/bin/zvukd artist-albums "$(qval id)" 2>/dev/null || echo '{"items":[]}')" ;;
   /api/events) send "application/json" "$(events_json)" ;;
