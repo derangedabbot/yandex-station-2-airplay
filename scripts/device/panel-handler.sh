@@ -446,29 +446,6 @@ select{width:100%;padding:10px;border-radius:10px;border:1px solid #2d3340;backg
 </div>
 </div>
 
-<div class="card">
-  <div class="grid">
-    <button data-a="airplay-restart">Перезапустить AirPlay</button>
-    <button data-a="airplay-off">Выключить AirPlay</button>
-    <button data-a="avahi-restart">Перезапустить avahi</button>
-    <button data-a="mediad-restart">Поднять Алису</button>
-    <button data-a="reboot" class="warn">Перезагрузить</button>
-  </div>
-  <div class="small">Только домашняя сеть</div>
-</div>
-
-<div class="card">
-  <div class="dim">Логи</div>
-  <div class="grid" style="margin-top:8px">
-    <button data-log="airplay">Приёмник</button>
-    <button data-log="owner">Распорядитель</button>
-    <button data-log="avahi">Avahi</button>
-    <button data-log="boot">Загрузка</button>
-    <button data-log="updates">Обновления</button>
-    <button data-log="panel">Панель</button>
-  </div>
-  <pre id="out" class="small"></pre>
-</div>
 </div><!-- /view-main -->
 
 <div id="view-sys" style="display:none">
@@ -502,6 +479,29 @@ select{width:100%;padding:10px;border-radius:10px;border:1px solid #2d3340;backg
   <pre id="sys-log" class="small">…</pre>
 </div>
 
+</div>
+<div class="card">
+  <div class="grid">
+    <button data-a="airplay-restart">Перезапустить AirPlay</button>
+    <button data-a="airplay-off">Выключить AirPlay</button>
+    <button data-a="avahi-restart">Перезапустить avahi</button>
+    <button data-a="mediad-restart">Поднять Алису</button>
+    <button data-a="reboot" class="warn">Перезагрузить</button>
+  </div>
+  <div class="small">Только домашняя сеть</div>
+</div>
+
+<div class="card">
+  <div class="dim">Логи · быстрый доступ</div>
+  <div class="grid" style="margin-top:8px">
+    <button data-log="airplay">Приёмник</button>
+    <button data-log="owner">Распорядитель</button>
+    <button data-log="avahi">Avahi</button>
+    <button data-log="boot">Загрузка</button>
+    <button data-log="updates">Обновления</button>
+    <button data-log="panel">Панель</button>
+  </div>
+  <pre id="out" class="small"></pre>
 </div>
 </div><!-- /view-sys -->
 
