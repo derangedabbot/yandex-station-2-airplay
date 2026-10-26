@@ -1,4 +1,16 @@
 #!/bin/sh
+# Один экземпляр: две копии распорядителя дерутся за приёмник и плодят дубли
+# shairport-sync, а с дублями управление AirPlay молча перестаёт работать:
+# звук держит один экземпляр, D-Bus-имя занимает другой.
+LOCK=/run/audio-owner.lock
+if [ -f "$LOCK" ]; then
+  OLD=$(cat "$LOCK" 2>/dev/null)
+  if [ -n "$OLD" ] && [ "$OLD" != "$$" ] && grep -qa 'audio-owner.sh' "/proc/$OLD/cmdline" 2>/dev/null; then
+    echo "$(date): распорядитель уже работает (pid $OLD)" >> /data/local/tmp/audio-owner.log
+    exit 0
+  fi
+fi
+echo $$ > "$LOCK"
 # Распорядитель звука для AirPlay 2: приёмник виден всегда, Алиса возвращается после сессии.
 #   - идёт AirPlay (есть ESTABLISHED соединение с приёмником) -> демон колонки гасим
 #   - сессия кончилась -> приёмник перезапускается (отпускает звук), демон колонки поднимается
@@ -11,7 +23,7 @@ pids_matching() {
     pid=${d#/proc/}
     [ "$pid" = "$$" ] && continue
     [ "$pid" = "$PPID" ] && continue
-    cmd=$(tr '\0' ' ' < "$d/cmdline" 2>/dev/null)
+    cmd=$(tr '\0' ' ' 2>/dev/null < "$d/cmdline")
     case "$cmd" in *"$1"*) echo "$pid";; esac
   done
 }
@@ -26,12 +38,20 @@ LAST_REVIVE=0
 LED=/data/local/bin/led-lamp.sh
 LED_PATTERN=tricolor
 
-sp_pid() { ps w | awk '/[s]hairport-sync -c \/data\/local\/opt\/airplay2/ {print $1}' | head -1; }
+# Ищем по /proc, а не по `ps w`: busybox обрезает длинную командную строку
+# (у нас перед бинарником стоит ld-musl), из-за чего распорядитель не видел живой
+# приёмник и поднимал второй. Два экземпляра — это тишина в управлении: звук
+# держит один, D-Bus-имя занимает другой.
+sp_pids() {
+  for d in /proc/[0-9]*; do
+    pid=${d#/proc/}
+    c=$(tr '\0' ' ' 2>/dev/null < "$d/cmdline") || continue
+    case "$c" in *ld-musl*airplay2/bin/shairport-sync*) echo "$pid" ;; esac
+  done
+}
+sp_pid() { sp_pids | head -1; }
 
-# Живая ли AirPlay-сессия: ESTABLISHED на порт приёмника. До 5.6 AirPlay 2 слушал
-# фиксированный 7000 (0x1B58) и не смотрел на port из конфига; в 5.6+ берётся порт из
-# shairport-sync.conf (у нас 5000, 0x1388). Проверяем оба — иначе после обновления
-# распорядитель перестаёт видеть сессию, звук держит mediad и ALSA отвечает Resource busy.
+# Живая ли AirPlay-сессия: установленное соединение на порт 7000 (0x1B58).
 # Именно это, а не «приёмник уже держит ALSA», потому что устройство держит mediad
 # и приёмник его никогда не получит — получался замкнутый круг и тишина.
 airplay_session() {
@@ -133,7 +153,7 @@ revive_receiver() {
 # кольцо должно дышать зелёным, иначе распорядитель его гасит каждые 4 секунды.
 zvuk_playing() {
   for p in /proc/[0-9]*; do
-    c=$(tr '\0' ' ' < "$p/cmdline" 2>/dev/null || true)
+    c=$(tr '\0' ' ' 2>/dev/null < "$p/cmdline" || true)
     case "$c" in
       *"/usr/bin/aplay"*) ls -l "$p/fd" 2>/dev/null | grep -q pcmC0D0p && return 0 ;;
     esac

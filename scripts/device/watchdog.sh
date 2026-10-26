@@ -67,7 +67,9 @@ try() {  # try <имя> <команда...>
     return 0
   fi
   log "$name не работает — поднимаю"
-  "$@" >>"$LOG" 2>&1 &
+  # Вывод демона в лог сторожа не пускаем: audio-owner живёт вечно и писал туда всё,
+  # из-за чего лог распухал до мегабайтов. У каждого демона свой лог.
+  "$@" >/dev/null 2>&1 &
   eval "LAST_$name=$now"
 }
 
@@ -83,5 +85,11 @@ while :; do
     has 'maind --mediad' || try mediad /data/local/bin/start-mediad.sh
   fi
   listening 1F91 || try panel /bin/sh /data/local/bin/panel-server.sh
+
+  # подрезка лога в цикле: на старте её мало, демоны шумят
+  SZ=$(wc -c < "$LOG" 2>/dev/null | tr -d ' ')
+  if [ -n "$SZ" ] && [ "$SZ" -gt 200000 ]; then
+    tail -300 "$LOG" > "$LOG.tmp" 2>/dev/null && mv "$LOG.tmp" "$LOG"
+  fi
   sleep $INTERVAL
 done

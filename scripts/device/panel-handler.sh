@@ -250,6 +250,56 @@ do_log() {
   send "text/plain; charset=utf-8" "$(tail -40 "$F" 2>/dev/null)"
 }
 
+# Журнал загрузок и выключений. Пишется из /etc/init.d/S97station-root.
+# Формат строки: boot|epoch|iso  либо  shutdown|epoch|iso
+JOURNAL=/data/local/tmp/boots.log
+
+events_json() {
+  if [ ! -s "$JOURNAL" ]; then
+    echo '{"events":[]}'
+    return
+  fi
+  # clean=1 — перед этой загрузкой было штатное выключение;
+  # clean=0 — выключения не было (сбой, watchdog, питание); clean=-1 — самая первая запись.
+  awk -F'|' '
+    { n++; k[n]=$1; t[n]=$2+0; i[n]=$3 }
+    END {
+      printf "{\"events\":[";
+      for (j=1;j<=n;j++) {
+        if (k[j]=="shutdown") clean=1;
+        else if (j==1) clean=-1;
+        else if (k[j-1]=="shutdown") clean=1;
+        else clean=0;
+        if (j>1) printf ",";
+        printf "{\"kind\":\"%s\",\"time\":%d,\"iso\":\"%s\",\"clean\":%d}", k[j], t[j], i[j], clean;
+      }
+      printf "]}";
+    }' "$JOURNAL"
+}
+
+do_syslog() {
+  N=$(qval name)
+  L=$(qval lines)
+  case "$L" in ''|*[!0-9]*) L=80 ;; esac
+  [ "$L" -gt 300 ] && L=300
+  case "$N" in
+    mediad)   F=/data/quasar/daemons_logs/mediad.log ;;
+    airplay)  F=/data/local/tmp/shairport2.log ;;
+    owner)    F=/data/local/tmp/audio-owner.log ;;
+    zvukd)    F=/data/local/tmp/zvukd.log ;;
+    alice)    F=/data/local/tmp/alice-voice.log ;;
+    watchdog) F=/data/local/tmp/watchdog.log ;;
+    panel)    F=/data/local/tmp/panel.log ;;
+    boot)     F=/data/local/tmp/boot-airplay.log ;;
+    *) send "text/plain; charset=utf-8" "нет такого лога"; return ;;
+  esac
+  if [ ! -f "$F" ]; then
+    send "text/plain; charset=utf-8" "файла нет: $F"
+    return
+  fi
+  send "text/plain; charset=utf-8" "$(tail -n "$L" "$F" 2>/dev/null)"
+}
+
 page() {
   printf 'HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n'
   cat <<'EOF'
@@ -277,10 +327,22 @@ input[type=range]{width:100%;accent-color:#79a8ff}
 @media (min-width:900px){.cols{grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;align-items:start}}
 .cols>.card{margin-bottom:14px}
 pre{white-space:pre-wrap;margin:10px 0 0}
+.tabs{display:flex;gap:8px;margin:0 0 16px}
+.tab{width:auto;padding:9px 16px;border-radius:10px;border:1px solid #262a33;background:#181b22;color:#8b93a1;font-size:14px}
+.tab.on{background:#232833;color:#e8eaed;border-color:#3a4152}
+.ev{display:flex;justify-content:space-between;gap:10px;padding:6px 0;border-bottom:1px solid #22262e;font-size:14px}
+.ev:last-child{border:0}
+select{width:100%;padding:10px;border-radius:10px;border:1px solid #2d3340;background:#12151b;color:#e8eaed}
 </style></head><body>
 <h1>Яндекс Станция Midi</h1>
 <div class="sub">Root · AirPlay · Обновления выключены</div>
 
+<div class="tabs">
+  <button class="tab on" data-view="main">Панель</button>
+  <button class="tab" data-view="sys">Система</button>
+</div>
+
+<div id="view-main">
 <div class="cols">
 <div style="grid-column:1/-1" class="dim">Состояние и железо</div>
 
@@ -407,6 +469,41 @@ pre{white-space:pre-wrap;margin:10px 0 0}
   </div>
   <pre id="out" class="small"></pre>
 </div>
+</div><!-- /view-main -->
+
+<div id="view-sys" style="display:none">
+<div class="cols">
+
+<div class="card">
+  <div class="hdr"><span class="dim">События</span><b id="ev-up" class="dim"></b></div>
+  <div id="ev-list"><div class="dim">…</div></div>
+  <div class="small">Загрузки и выключения. «Нештатная» — если перед загрузкой не было штатного выключения (сбой, watchdog, щёлкнули питанием).</div>
+</div>
+
+<div class="card">
+  <div class="hdr"><span class="dim">Сторож демонов</span><b class="dim">watchdog.log</b></div>
+  <pre id="sys-watch" class="small">…</pre>
+  <div class="grid" style="margin-top:8px"><button onclick="loadSys()">Обновить</button><button data-view="main">Вернуться</button></div>
+</div>
+
+<div class="card">
+  <div class="hdr"><span class="dim">Логи</span><b class="dim">хвост файла</b></div>
+  <select id="log-name">
+    <option value="mediad">Алиса (mediad)</option>
+    <option value="airplay">Приёмник AirPlay</option>
+    <option value="owner">Распорядитель звука</option>
+    <option value="zvukd">Плеер Звук</option>
+    <option value="alice">Голосовые команды</option>
+    <option value="watchdog">Сторож</option>
+    <option value="boot">Загрузка AirPlay</option>
+    <option value="panel">Панель</option>
+  </select>
+  <div class="grid" style="margin-top:8px"><button onclick="loadLog()">Показать</button></div>
+  <pre id="sys-log" class="small">…</pre>
+</div>
+
+</div>
+</div><!-- /view-sys -->
 
 <script>
 var out=document.getElementById('out');
@@ -657,6 +754,61 @@ document.querySelectorAll('[data-log]').forEach(function(b){b.onclick=function()
   fetch('/log?name='+b.dataset.log).then(function(r){return r.text()}).then(show)
     .catch(function(e){show('ошибка: '+e)});
 }});
+
+// --- вкладки: панель / система ---
+function switchView(v){
+  document.getElementById('view-main').style.display = (v==='main')?'':'none';
+  document.getElementById('view-sys').style.display  = (v==='sys')?'':'none';
+  document.querySelectorAll('.tab').forEach(function(t){t.classList.toggle('on', t.dataset.view===v)});
+  if(v==='sys') loadSys();
+}
+document.querySelectorAll('[data-view]').forEach(function(b){b.onclick=function(){switchView(b.dataset.view)}});
+
+function fmtTs(t){
+  var d=new Date(t*1000);
+  if(isNaN(d.getTime())) return '—';
+  var p=function(n){return (n<10?'0':'')+n};
+  return p(d.getDate())+'.'+p(d.getMonth()+1)+' '+p(d.getHours())+':'+p(d.getMinutes());
+}
+function uptimeStr(sec){
+  if(sec<=0) return '';
+  var h=Math.floor(sec/3600), m=Math.round((sec%3600)/60);
+  return h>0 ? (h+' ч '+m+' мин') : (m+' мин');
+}
+function loadEvents(){
+  var box=document.getElementById('ev-list');
+  fetch('/api/events',{cache:'no-store'}).then(function(r){return r.json()}).then(function(d){
+    var ev=(d.events||[]).slice(-30).reverse();
+    if(!ev.length){box.innerHTML='<div class="dim">пока нет записей</div>';return}
+    var out='';
+    for(var i=0;i<ev.length;i++){
+      var e=ev[i], prev=ev[i+1];
+      var title = e.kind==='shutdown' ? 'Выключение' : 'Загрузка';
+      var badge = '';
+      if(e.kind==='boot' && e.clean===0) badge=' <span class="bad">нештатная</span>';
+      var extra = '';
+      if(prev && prev.kind==='boot' && e.kind==='shutdown'){
+        var d2=e.time-prev.time; if(d2>0) extra=' <span class="dim">· работала '+uptimeStr(d2)+'</span>';
+      }
+      out+='<div class="ev"><span>'+title+badge+extra+'</span><span class="dim">'+fmtTs(e.time)+'</span></div>';
+    }
+    box.innerHTML=out;
+  }).catch(function(){box.innerHTML='<div class="bad">не удалось получить события</div>'});
+}
+function loadSys(){
+  loadEvents();
+  fetch('/api/logs?name=watchdog&lines=20',{cache:'no-store'}).then(function(r){return r.text()})
+    .then(function(t){document.getElementById('sys-watch').textContent=t||'(пусто)'})
+    .catch(function(){document.getElementById('sys-watch').textContent='ошибка'});
+}
+function loadLog(){
+  var n=document.getElementById('log-name').value;
+  var pre=document.getElementById('sys-log');
+  pre.textContent='…';
+  fetch('/api/logs?name='+encodeURIComponent(n)+'&lines=120',{cache:'no-store'})
+    .then(function(r){return r.text()}).then(function(t){pre.textContent=t||'(пусто)'})
+    .catch(function(e){pre.textContent='ошибка: '+e});
+}
 </script></body></html>
 EOF
 }
@@ -687,6 +839,8 @@ case "$URLPATH" in
   /api/album-tracks) send "application/json" "$(/data/local/bin/zvukd album-tracks "$(qval id)" 2>/dev/null || echo '{"items":[]}')" ;;
   /api/artist-albums)
       send "application/json" "$(/data/local/bin/zvukd artist-albums "$(qval id)" 2>/dev/null || echo '{"items":[]}')" ;;
+  /api/events) send "application/json" "$(events_json)" ;;
+  /api/logs)   do_syslog ;;
   /action)     do_action ;;
   /log)        do_log ;;
   /)           page ;;
